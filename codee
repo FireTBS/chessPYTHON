@@ -1,0 +1,301 @@
+import os
+import copy
+
+class ChessGame:
+    def __init__(self):
+        self.board = [
+            ['♜', '♞', '♝', '♛', '♚', '♝', '♞', '♜'],
+            ['♟', '♟', '♟', '♟', '♟', '♟', '♟', '♟'],
+            ['·', '·', '·', '·', '·', '·', '·', '·'],
+            ['·', '·', '·', '·', '·', '·', '·', '·'],
+            ['·', '·', '·', '·', '·', '·', '·', '·'],
+            ['·', '·', '·', '·', '·', '·', '·', '·'],
+            ['♙', '♙', '♙', '♙', '♙', '♙', '♙', '♙'],
+            ['♖', '♘', '♗', '♕', '♔', '♗', '♘', '♖']
+        ]
+        self.current_player = 'White'
+        self.game_over = False
+        self.castling_rights = {
+            'White': {'K': True, 'Q': True},
+            'Black': {'K': True, 'Q': True}
+        }
+
+    def print_board(self):
+        os.system('cls' if os.name == 'nt' else 'clear')
+        print(f"\n{' ' * 10}Шахматы ({self.current_player} ходит)\n")
+        print("    a b c d e f g h")
+        for i, row in enumerate(self.board):
+            print(f" {8-i} ", end=" ")
+            for cell in row:
+                print(cell, end=" ")
+            print(f" {8-i}")
+        print("    a b c d e f g h")
+
+    def get_king_position(self, color):
+        king = '♔' if color == 'White' else '♚'
+        for i, row in enumerate(self.board):
+            for j, piece in enumerate(row):
+                if piece == king:
+                    return (i, j)
+        return None
+
+    def is_in_check(self, color):
+        king_pos = self.get_king_position(color)
+        if not king_pos:
+            return False
+
+        opponent = 'Black' if color == 'White' else 'White'
+        for i in range(8):
+            for j in range(8):
+                piece = self.board[i][j]
+                if (color == 'White' and piece in {'♜','♞','♝','♛','♚','♟'}) or \
+                   (color == 'Black' and piece in {'♖','♘','♗','♕','♔','♙'}):
+                    if self.is_valid_move((i, j), king_pos, check_check=False):
+                        return True
+        return False
+
+    def get_all_valid_moves(self, color):
+        moves = []
+        for i in range(8):
+            for j in range(8):
+                piece = self.board[i][j]
+                if (color == 'White' and piece in {'♔','♕','♖','♗','♘','♙'}) or \
+                   (color == 'Black' and piece in {'♚','♛','♜','♝','♞','♟'}):
+                    for x in range(8):
+                        for y in range(8):
+                            if self.is_valid_move((i, j), (x, y)):
+                                moves.append(((i, j), (x, y)))
+        return moves
+
+    def is_checkmate(self):
+        return self.is_in_check(self.current_player) and len(self.get_all_valid_moves(self.current_player)) == 0
+
+    def is_stalemate(self):
+        return not self.is_in_check(self.current_player) and len(self.get_all_valid_moves(self.current_player)) == 0
+
+    def is_valid_move(self, src, dest, check_check=True):
+        src_row, src_col = src
+        dest_row, dest_col = dest
+
+        if src == dest:
+            return False
+
+        piece = self.board[src_row][src_col]
+        target = self.board[dest_row][dest_col]
+
+        # Проверка цвета фигуры
+        if self.current_player == 'White' and piece in {'♜','♞','♝','♛','♚','♟'}:
+            return False
+        if self.current_player == 'Black' and piece in {'♖','♘','♗','♕','♔','♙'}:
+            return False
+
+        # Рокировка
+        if piece in {'♔', '♚'} and abs(src_col - dest_col) == 2:
+            return self.validate_castling(src, dest)
+
+        # Основные правила движения
+        if not self.validate_piece_move(piece, src, dest):
+            return False
+
+        # Проверка шаха после хода
+        if check_check:
+            temp_board = copy.deepcopy(self.board)
+            temp_board[dest_row][dest_col] = temp_board[src_row][src_col]
+            temp_board[src_row][src_col] = '·'
+            original_board = self.board
+            self.board = temp_board
+            in_check = self.is_in_check(self.current_player)
+            self.board = original_board
+            if in_check:
+                return False
+
+        return True
+
+    def validate_piece_move(self, piece, src, dest):
+        src_row, src_col = src
+        dest_row, dest_col = dest
+        dx = dest_row - src_row
+        dy = dest_col - src_col
+
+        # Общие правила для всех фигур
+        if self.board[dest_row][dest_col] != '·' and \
+           ((self.current_player == 'White' and self.board[dest_row][dest_col] in {'♖','♘','♗','♕','♔','♙'}) or \
+           (self.current_player == 'Black' and self.board[dest_row][dest_col] in {'♜','♞','♝','♛','♚','♟'})):
+            return False
+
+        # Пешки
+        if piece == '♙':
+            # Движение вперед
+            if dy == 0: 
+                if src_row == 6 and dx == -2 and self.board[5][src_col] == '·' and self.board[4][src_col] == '·':
+                    return True
+                if dx == -1 and self.board[dest_row][dest_col] == '·':
+                    return True
+            # Взятие
+            elif abs(dy) == 1 and dx == -1:
+                return self.board[dest_row][dest_col] != '·'
+            return False
+
+        if piece == '♟':
+            if dy == 0:
+                if src_row == 1 and dx == 2 and self.board[2][src_col] == '·' and self.board[3][src_col] == '·':
+                    return True
+                if dx == 1 and self.board[dest_row][dest_col] == '·':
+                    return True
+            elif abs(dy) == 1 and dx == 1:
+                return self.board[dest_row][dest_col] != '·'
+            return False
+
+        # Ладья
+        if piece in {'♖', '♜'}:
+            if src_row != dest_row and src_col != dest_col:
+                return False
+            step = 1 if dest_row > src_row or dest_col > src_col else -1
+            if src_row == dest_row:
+                for col in range(src_col + step, dest_col, step):
+                    if self.board[src_row][col] != '·':
+                        return False
+            else:
+                for row in range(src_row + step, dest_row, step):
+                    if self.board[row][src_col] != '·':
+                        return False
+            return True
+
+        # Слон
+        if piece in {'♗', '♝'}:
+            if abs(dx) != abs(dy):
+                return False
+            step_x = 1 if dx > 0 else -1
+            step_y = 1 if dy > 0 else -1
+            for i in range(1, abs(dx)):
+                if self.board[src_row + i*step_x][src_col + i*step_y] != '·':
+                    return False
+            return True
+
+        # Ферзь
+        if piece in {'♕', '♛'}:
+            return self.validate_piece_move('♖', src, dest) if dx == 0 or dy == 0 else self.validate_piece_move('♗', src, dest)
+
+        # Конь
+        if piece in {'♘', '♞'}:
+            return (abs(dx) == 2 and abs(dy) == 1) or (abs(dx) == 1 and abs(dy) == 2)
+
+        # Король
+        if piece in {'♔', '♚'}:
+            return abs(dx) <= 1 and abs(dy) <= 1
+
+        return False
+
+    def validate_castling(self, src, dest):
+        color = self.current_player
+        row = 7 if color == 'White' else 0
+        kingside = dest[1] > src[1]
+
+        # Проверка прав на рокировку
+        if not self.castling_rights[color]['K' if kingside else 'Q']:
+            return False
+
+        # Проверка пути
+        rook_col = 7 if kingside else 0
+        step = 1 if kingside else -1
+        for col in range(src[1] + step, rook_col, step):
+            if self.board[row][col] != '·':
+                return False
+
+        # Проверка нахождения под шахом
+        temp_board = copy.deepcopy(self.board)
+        for col in range(src[1], src[1] + (3 if kingside else -2), step):
+            temp_board[row][col] = '♔' if color == 'White' else '♚'
+            if self.is_in_check(color):
+                return False
+            temp_board[row][col] = '·'
+        return True
+
+    def make_move(self, src, dest):
+        src_row, src_col = src
+        dest_row, dest_col = dest
+        piece = self.board[src_row][src_col]
+
+        # Рокировка
+        if piece in {'♔', '♚'} and abs(src_col - dest_col) == 2:
+            rook_col = 7 if dest_col > src_col else 0
+            new_rook_col = 5 if dest_col > src_col else 3
+            self.board[dest_row][new_rook_col] = self.board[src_row][rook_col]
+            self.board[src_row][rook_col] = '·'
+
+        # Обновление прав на рокировку
+        if piece in {'♔', '♚'}:
+            self.castling_rights[self.current_player]['K'] = False
+            self.castling_rights[self.current_player]['Q'] = False
+        elif piece in {'♖', '♜'}:
+            if src_col == 0:
+                self.castling_rights[self.current_player]['Q'] = False
+            elif src_col == 7:
+                self.castling_rights[self.current_player]['K'] = False
+
+        # Превращение пешки
+        if piece == '♙' and dest_row == 0:
+            self.board[src_row][src_col] = '♕'
+        elif piece == '♟' and dest_row == 7:
+            self.board[src_row][src_col] = '♛'
+
+        # Выполнение хода
+        self.board[dest_row][dest_col] = piece
+        self.board[src_row][src_col] = '·'
+        self.current_player = 'Black' if self.current_player == 'White' else 'White'
+
+    def play(self):
+        if os.name == 'nt':
+            os.system('chcp 65001 > nul')
+            
+        while not self.game_over:
+            self.print_board()
+
+            if self.is_checkmate():
+                print(f"\nШАХ И МАТ! Победили {'чёрные' if self.current_player == 'White' else 'белые'}")
+                break
+            if self.is_stalemate():
+                print("\nПАТ! Ничья")
+                break
+
+            move = input("\nВведите ход (например 'e2 e4' или '0-0'): ").strip()
+
+            if move.lower() == 'exit':
+                break
+
+            if move in ['0-0', '0-0-0']:
+                color = self.current_player
+                row = 7 if color == 'White' else 0
+                kingside = move == '0-0'
+                king_pos = (row, 4)
+                dest_col = 6 if kingside else 2
+                dest = (row, dest_col)
+
+                if self.validate_castling(king_pos, dest):
+                    self.make_move(king_pos, dest)
+                else:
+                    print("Нельзя сделать рокировку!")
+                continue
+
+            if len(move) != 5 or move[2] != ' ':
+                print("Неверный формат! Используйте 'a2 a4'")
+                continue
+
+            try:
+                src_col = ord(move[0].lower()) - ord('a')
+                src_row = 8 - int(move[1])
+                dest_col = ord(move[3].lower()) - ord('a')
+                dest_row = 8 - int(move[4])
+                src = (src_row, src_col)
+                dest = (dest_row, dest_col)
+            except:
+                print("Неверные координаты!")
+                continue
+
+            if self.is_valid_move(src, dest):
+                self.make_move(src, dest)
+            else:
+                print("Неверный ход!")
+
+if __name__ == "__main__":
+    ChessGame().play()
